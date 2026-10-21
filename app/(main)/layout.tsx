@@ -14,8 +14,22 @@ import {
   ChevronRight,
   Boxes,
   LogOutIcon,
+  ReceiptText,
+  BarChart3,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useState } from "react";
 
 const navigation = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -24,6 +38,9 @@ const navigation = [
   { label: "Suppliers", href: "/suppliers", icon: Truck },
   { label: "Stock In", href: "/stock-in", icon: ArrowDownToLine },
   { label: "Stock Out", href: "/stock-out", icon: ArrowUpFromLine },
+  { label: "Billing/Sales", href: "/billing", icon: ReceiptText },
+  { label: "Report", href: "/report", icon: BarChart3 },
+  { label: "Staff Management", href: "/staff-mgmt", icon: Users },
   { label: "Transactions", href: "/transactions", icon: History },
 ];
 
@@ -34,12 +51,16 @@ export default function MainLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   function handleSignOut() {
+    setIsDialogOpen(true);
+  }
+  const handleDialogSignOut = () => {
+    setIsDialogOpen(false);
     localStorage.removeItem("token");
     toast.success("Signed out successfully.");
     router.replace("/signin");
-  }
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 lg:flex-row">
@@ -135,6 +156,31 @@ export default function MainLayout({
           Inventory Management System
         </footer>
       </div>
+      {/* SIGN-OUT ALER DIALOG */}
+      <AlertDialog open={isDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign Out?</AlertDialogTitle>
+
+            <AlertDialogDescription>
+              Are you sure you want to Sign Out?{" "}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </AlertDialogCancel>
+
+            <AlertDialogAction
+              onClick={handleDialogSignOut}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Sign Out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

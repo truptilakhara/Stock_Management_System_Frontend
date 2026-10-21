@@ -26,11 +26,25 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 
-import { getSuppliers } from "@/lib/api";
+import {
+  createSupplier,
+  deleteSupplierById,
+  getSuppliers,
+  updateSupplierById,
+} from "@/lib/api";
 import { Supplier } from "@/lib/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const emptyForm = {
   name: "",
@@ -47,7 +61,10 @@ export default function SuppliersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
-
+  const [deleteSupplierId, setDeleteSupplierId] = useState<string | null>(null);
+  const [deleteSupplierName, setDeleteSupplierName] = useState<string | null>(
+    null,
+  );
   // Load suppliers from MongoDB through the backend API.
   useEffect(() => {
     let isMounted = true;
@@ -130,7 +147,7 @@ export default function SuppliersPage() {
     setDialogOpen(true);
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     const name = form.name.trim();
@@ -139,14 +156,16 @@ export default function SuppliersPage() {
     const phone = form.phone.trim();
     const address = form.address.trim();
 
+    // 1. Validate required fields
     if (!name || !companyName || !email || !phone || !address) {
       toast.error("Please fill in all required supplier fields.");
       return;
     }
 
+    // 2. Prevent duplicate emails, excluding the supplier being edited
     const duplicateEmail = suppliers.some(
       (supplier) =>
-        supplier.email.toLowerCase() === email.toLowerCase() &&
+        (supplier.email ?? "").trim().toLowerCase() === email.toLowerCase() &&
         supplier._id !== editingId,
     );
 
@@ -155,53 +174,88 @@ export default function SuppliersPage() {
       return;
     }
 
-    // Temporary local-state update.
-    // Replace this with your POST/PUT API calls to persist changes.
-    if (editingId !== null) {
-      setSuppliers((current) =>
-        current.map((supplier) =>
-          supplier._id === editingId
-            ? {
-                ...supplier,
-                name,
-                companyName,
-                email,
-                phone,
-                address,
-              }
-            : supplier,
-        ),
-      );
+    // 3. Prepare the payload once for create and update
+    const supplierData = {
+      name,
+      companyName,
+      email,
+      phone,
+      address,
+    };
 
-      toast.success("Supplier updated in the current list.");
-    } else {
+    try {
+      if (editingId !== null) {
+        // UPDATE supplier
+        await updateSupplierById(editingId, supplierData);
+
+        setSuppliers((current) =>
+          current.map((supplier) =>
+            supplier._id === editingId
+              ? { ...supplier, ...supplierData }
+              : supplier,
+          ),
+        );
+
+        toast.success("Supplier updated successfully.");
+      } else {
+        // CREATE supplier
+        const response = await createSupplier(supplierData);
+
+        // Assumes createSupplier returns { data: supplier }
+        const newSupplier = response.data;
+
+        if (!newSupplier?._id) {
+          throw new Error("Supplier created, but the response is invalid.");
+        }
+
+        setSuppliers((current) => [...current, newSupplier]);
+
+        toast.success("Supplier created successfully.");
+      }
+
+      // 4. Run cleanup ONLY after successful API operation
+      setDialogOpen(false);
+      setForm({ ...emptyForm });
+      setEditingId(null);
+    } catch (error) {
+      // 5. On failure, preserve form values and keep dialog open
       toast.error(
-        "Add supplier API is not connected yet. No supplier was saved.",
+        error instanceof Error ? error.message : "Failed to save supplier.",
       );
+    }
+  }
+
+  function openDeleteDialog(supplier: Supplier) {
+    if (!supplier._id) {
+      toast.error("Supplier ID is missing.");
       return;
     }
 
-    setDialogOpen(false);
-    setForm({ ...emptyForm });
-    setEditingId(null);
+    setDeleteSupplierId(supplier._id);
+    setDeleteSupplierName(supplier.name);
   }
+  const handleDelete = async () => {
+    if (!deleteSupplierId) return;
 
-  function handleDelete(id: string) {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this supplier?",
-    );
+    try {
+      await deleteSupplierById(deleteSupplierId);
 
-    if (!confirmed) return;
+      setSuppliers((current) =>
+        current.filter((supplier) => supplier._id !== deleteSupplierId),
+      );
 
-    // Temporary local-state deletion only.
-    // Connect your DELETE API before removing database records.
-    setSuppliers((current) =>
-      current.filter((supplier) => supplier._id !== id),
-    );
+      setDeleteSupplierId(null);
+      setDeleteSupplierName("");
 
-    toast.success("Supplier removed from the current list.");
-  }
+      toast.success("Supplier Deleted");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete supplier.",
+      );
 
+      setDeleteSupplierId(null);
+    }
+  };
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       {/* Page header */}
@@ -216,12 +270,10 @@ export default function SuppliersPage() {
         </div>
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger>
-            <Button onClick={openAddDialog} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add Supplier
-            </Button>
-          </DialogTrigger>
+          <Button type="button" onClick={openAddDialog} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Supplier
+          </Button>
 
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
@@ -354,133 +406,173 @@ export default function SuppliersPage() {
       </div>
 
       {/* Supplier table */}
-      <Card className="overflow-hidden">
-        <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle>All Suppliers</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              View and manage your registered suppliers.
-            </p>
-          </div>
+      <div>
+        {" "}
+        <Card className="overflow-hidden">
+          <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>All Suppliers</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                View and manage your registered suppliers.
+              </p>
+            </div>
 
-          <div className="relative w-full sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search suppliers..."
-              className="pl-9"
-              aria-label="Search suppliers"
-            />
-          </div>
-        </CardHeader>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search suppliers..."
+                className="pl-9"
+                aria-label="Search suppliers"
+              />
+            </div>
+          </CardHeader>
 
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left text-sm">
-              <thead className="border-y bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-4 font-medium">Supplier</th>
-                  <th className="px-5 py-4 font-medium">Contact</th>
-                  <th className="px-5 py-4 font-medium">Address</th>
-                  <th className="px-5 py-4 text-right font-medium">Actions</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y">
-                {isLoading ? (
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px] text-left text-sm">
+                <thead className="border-y bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <td colSpan={4} className="px-5 py-12 text-center">
-                      Loading suppliers...
-                    </td>
+                    <th className="px-5 py-4 font-medium">Supplier</th>
+                    <th className="px-5 py-4 font-medium">Contact</th>
+                    <th className="px-5 py-4 font-medium">Address</th>
+                    <th className="px-5 py-4 text-right font-medium">
+                      Actions
+                    </th>
                   </tr>
-                ) : filteredSuppliers.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-5 py-12 text-center">
-                      <Truck className="mx-auto h-8 w-8 text-slate-300" />
-                      <p className="mt-3 font-medium text-slate-700">
-                        No suppliers found
-                      </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Try another search or add a supplier.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredSuppliers.map((supplier) => (
-                    <tr
-                      key={supplier._id}
-                      className="transition-colors hover:bg-slate-50/80"
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                            <Building2 className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-900">
-                              {supplier.name}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {supplier.companyName}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
+                </thead>
 
-                      <td className="px-5 py-4">
-                        <p className="flex items-center gap-1.5 font-medium text-slate-800">
-                          <Mail className="h-3.5 w-3.5" />
-                          {supplier.email || "No email"}
-                        </p>
-                        <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Phone className="h-3.5 w-3.5" />
-                          {supplier.phone}
-                        </p>
-                      </td>
-
-                      <td className="px-5 py-4 text-slate-600">
-                        <span className="flex items-center gap-1.5">
-                          <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
-                          {supplier.address || "—"}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Edit ${supplier.name}`}
-                            onClick={() => openEditDialog(supplier)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Delete ${supplier.name}`}
-                            onClick={() => handleDelete(supplier._id)}
-                            className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                <tbody className="divide-y">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-12 text-center">
+                        Loading suppliers...
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : filteredSuppliers.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-12 text-center">
+                        <Truck className="mx-auto h-8 w-8 text-slate-300" />
+                        <p className="mt-3 font-medium text-slate-700">
+                          No suppliers found
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Try another search or add a supplier.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredSuppliers.map((supplier) => (
+                      <tr
+                        key={supplier._id}
+                        className="transition-colors hover:bg-slate-50/80"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                              <Building2 className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-slate-900">
+                                {supplier.name}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {supplier.companyName}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
 
-          <div className="border-t px-5 py-3 text-xs text-muted-foreground">
-            Showing {filteredSuppliers.length} of {suppliers.length} suppliers
-          </div>
-        </CardContent>
-      </Card>
+                        <td className="px-5 py-4">
+                          <p className="flex items-center gap-1.5 font-medium text-slate-800">
+                            <Mail className="h-3.5 w-3.5" />
+                            {supplier.email || "No email"}
+                          </p>
+                          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Phone className="h-3.5 w-3.5" />
+                            {supplier.phone}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4 text-slate-600">
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
+                            {supplier.address || "—"}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Edit ${supplier.name}`}
+                              onClick={() => openEditDialog(supplier)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Delete ${supplier.name}`}
+                              onClick={() => openDeleteDialog(supplier)}
+                              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t px-5 py-3 text-xs text-muted-foreground">
+              Showing {filteredSuppliers.length} of {suppliers.length} suppliers
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      {/* DELETE SUPPLIER DIALOG */}
+      <AlertDialog
+        open={deleteSupplierId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteSupplierId(null);
+            setDeleteSupplierName("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Supplier?</AlertDialogTitle>
+
+            <AlertDialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-medium text-foreground">
+                {deleteSupplierName}
+              </span>
+              ? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Supplier
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

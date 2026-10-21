@@ -38,3 +38,42 @@ export interface ProductFormData {
     category: string;
     supplier: string;
 }
+
+export interface StockInRecord {
+    _id: string;
+    product: {
+        _id: string;
+        productName: string;
+    };
+    supplier?: {
+        _id: string;
+        name: string
+    }
+    quantity: number;
+    reference?: string;
+    reason?: string;
+    type: "stock-in";
+    createdAt: string;
+};
+export interface StockOutRecord {
+    _id: string;
+    product: {
+        _id: string;
+        productName: string;
+        quantity: number
+    };
+    supplier?: {
+        _id: string;
+        name: string
+    }
+    quantity: number;
+    reference?: string;
+    reason?: string;
+    type: "stock-out";
+    createdAt: string;
+};
+export interface StockOutSummary {
+    totalRecords: number;
+    totalQuantity: number;
+    todayQuantity: number;
+}

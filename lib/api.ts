@@ -171,6 +171,8 @@ export const getCategoryById = async (id: string) => {
 
     return data;
 };
+//END
+// SUPPLIER -Start
 export const getSuppliers = async () => {
 
     const response = await fetch(`${API_URL}/api/supplier/getSuppliers`, {
@@ -204,6 +206,25 @@ export const createSupplier = async (data: Supplier) => {
 
     if (!response.ok) {
         throw new Error(res.message || "Failed to create supplier.");
+    }
+
+    return res;
+};
+export const updateSupplierById = async (id: string, data: Supplier) => {
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${API_URL}/api/supplier/${id}`, {
+        method: "PUT",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data)
+    });
+
+    const res = await response.json();
+
+    if (!response.ok) {
+        throw new Error(res.message || "Failed to update supplier data.");
     }
 
     return res;
@@ -253,4 +274,54 @@ export const signUp = async (credential: { name: string, role: string, email: st
         throw new Error(data.message || "Sign up failed.")
     }
     return data
+}
+export const deleteSupplierById = async (id: string) => {
+    const token = localStorage.getItem("token")
+    const response = await fetch(`${API_URL}/api/supplier/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
+    })
+    const data = await response.json();
+    console.log(data)
+    if (!response.ok) {
+        throw new Error(data.message || "Failed to delete product")
+    }
+    return data
+
+}
+export const getStockInHistory = async () => {
+    const token = localStorage.getItem("token")
+
+    const response = await fetch(`${API_URL}/api/stock-in/getStockInHistory`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        }
+    })
+    const data = await response.json()
+    if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch stock-in data.");
+    }
+
+    return data;
+
+}
+export const getStockOutHistory = async () => {
+    const token = localStorage.getItem("token")
+
+    const response = await fetch(`${API_URL}/api/stock-out/getStockOutHistory`, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+        }
+    })
+    const data = await response.json()
+    if (!response.ok) {
+        throw new Error(data.message || "Failed to fetch stock-out data.");
+    }
+
+    return data;
+
 }

@@ -160,8 +160,8 @@ export default function ProductEditPage({
     sellingPrice: product.sellingPrice,
     brand: product.brand ?? "",
     description: product.description ?? "",
-    category: product.category._id,
-    supplier: product.supplier._id,
+    category: product?.category?._id ?? "",
+    supplier: product?.supplier?._id ?? "",
   };
 
   return (
